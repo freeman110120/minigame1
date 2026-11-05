@@ -21,7 +21,7 @@ namespace NightShift
         private static readonly Color Ink = new Color32(12, 20, 29, 255);
         private static readonly Color Amber = new Color32(255, 203, 124, 255);
         private static readonly Color DarkButton = new Color32(32, 52, 64, 248);
-        private static readonly Color Coral = new Color32(255, 157, 139, 255);
+        private static readonly Color Coral = new Color32(255, 181, 164, 255);
         private static readonly Color Plot = new Color32(20, 34, 44, 246);
         private static readonly Color Contact = new Color32(82, 108, 119, 255);
         private static readonly Color SafeRegion = new Color32(84, 175, 154, 255);
@@ -50,7 +50,7 @@ namespace NightShift
             bool chinese = chineseFont != null;
             font = chinese ? chineseFont : TMP_Settings.defaultFontAsset;
             this.displayFont = displayFont != null ? displayFont : font;
-            buttonFontSize = chinese ? 50 : 36;
+            buttonFontSize = chinese ? 54 : 38;
 
             var root = new GameObject("Night Shift HUD", typeof(RectTransform), typeof(Canvas),
                 typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -84,11 +84,12 @@ namespace NightShift
                 () => start?.Invoke(GameMode.Standard));
 
             ended = CreateRect("Results", safeArea, Bottom, 0f, MenuBottom, 0f, 0f);
-            resultScoreText = Label("Final Score", "", ended, Bottom, 0f, 156f, 700f, 174f, 156, Color.white);
+            resultScoreText = Label("Final Score", "", ended, Bottom, 0f, 169f, 700f, 174f, 156, Color.white);
             resultScoreText.fontStyle = FontStyles.Bold;
             FitSingleLine(resultScoreText, 82);
-            reasonText = Label("Failure Reason", "", ended, Bottom, 0f, 114f, 620f, 54f, 44, Coral);
-            FitSingleLine(reasonText, 30);
+            reasonText = Label("Failure Reason", "", ended, Bottom, 0f, 113f, 620f, 66f, 54, Coral);
+            reasonText.fontStyle = FontStyles.Bold;
+            FitSingleLine(reasonText, 36);
             AddButton(ended, chinese ? "重来" : "RETRY", -ButtonOffset, Amber, Ink, restart);
             AddButton(ended, chinese ? "换模式" : "MODE", ButtonOffset, DarkButton, Color.white, changeMode);
 
@@ -138,7 +139,7 @@ namespace NightShift
             bool showReason = !stability.gameObject.activeSelf && !string.IsNullOrEmpty(reason);
             reasonText.gameObject.SetActive(showReason);
             reasonText.text = reason;
-            resultScoreText.rectTransform.anchoredPosition = new Vector2(0f, showReason ? 156f : 124f);
+            resultScoreText.rectTransform.anchoredPosition = new Vector2(0f, showReason ? 169f : 124f);
             resultScoreText.text = score.ToString("D3");
         }
 

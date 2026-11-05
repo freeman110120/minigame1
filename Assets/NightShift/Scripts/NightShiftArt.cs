@@ -10,6 +10,11 @@ namespace NightShift
     {
         private const float FloorWidth = 5.2f;
         private const float FloorHeight = 1.2f;
+        private const float WindowBayWidth = .816f;
+        private const float CrewWindowOffset = -.5f * WindowBayWidth;
+        private const int CrewFloor = 1;
+        private const int EquipmentFloor = 2;
+        private const string WindowCrewName = "Window crew";
         private const float YardWidth = 19f;
         private const float StreetWidth = 110f;
         private const float AsphaltTileWidth = 5.5f;
@@ -24,6 +29,8 @@ namespace NightShift
         private readonly Material glass;
         private readonly Material warmGlass;
         private readonly Material idleGlass;
+        private readonly Material crewGlass;
+        private readonly Material equipmentGlass;
         private readonly Material mullion;
         private readonly Material flashing;
         private readonly Material roof;
@@ -35,6 +42,9 @@ namespace NightShift
         private readonly Material cityGlass;
         private readonly Material cityWindow;
         private readonly Mesh[] floorMeshes = new Mesh[3];
+        private readonly Mesh[] workerFrames = new Mesh[8];
+        private readonly Material[] workerMaterials;
+        private readonly Material[] suspendedCrewFloor;
         private readonly Mesh craneMesh;
         private readonly Mesh trolleyMesh;
         private readonly Mesh hookMesh;
@@ -71,6 +81,10 @@ namespace NightShift
             glass = RoomGlass("Rainy blue glazing", room, Hex("475F71"), Hex("1B2933"), .65f);
             idleGlass = RoomGlass("Unfinished room under work light", room, Hex("83776C"), Hex("E9BA8C") * .45f, .53f);
             warmGlass = RoomGlass("Amber-lit construction room", room, Hex("A3988C"), Hex("FFDBB8") * .90f, .53f);
+            crewGlass = RoomGlass("Backlit crew room", PaintTexture("Crew room with work lights", 96, PaintCrewRoom),
+                Hex("B49B80"), Hex("FFC489") * .58f, .44f);
+            equipmentGlass = RoomGlass("Cool equipment room", PaintTexture("Equipment room cabinets", 96, PaintEquipmentRoom),
+                Hex("8597A3"), Hex("BCD9F3") * .46f, .47f);
             mullion = Surface("Dark weathered steel", Hex("30383C"), .18f, .47f);
             flashing = Surface("Wet galvanized edge flashing", Hex("52606A"), .25f, .56f);
             cranePaint = Surface("Weathered ochre", Hex("C58B3F"), .18f, .46f);
@@ -115,6 +129,13 @@ namespace NightShift
                 darkFloor[i] = (Material[])brightFloor[i].Clone();
                 darkFloor[i][Array.IndexOf(darkFloor[i], warmGlass)] = idleGlass;
             }
+            suspendedCrewFloor = (Material[])darkFloor[CrewFloor].Clone();
+            suspendedCrewFloor[Array.IndexOf(suspendedCrewFloor, crewGlass)] = glass;
+            var silhouette = Own(new Material(this.unlitShader) { name = "Backlit worker silhouette", color = Hex("22282D") });
+            workerMaterials = new[] { silhouette };
+            for (int i = 0; i < workerFrames.Length; i++)
+                workerFrames[i] = Own(BuildWorkerFrame(i * Mathf.PI * 2f / workerFrames.Length, silhouette)
+                    .CreateMesh("Worker gait frame " + i));
 
             MeshBatch crane = BuildCrane();
             craneMesh = Own(crane.CreateMesh("Lattice crane jib"));
@@ -142,13 +163,20 @@ namespace NightShift
                 Quaternion.Euler(34f, 137f, 0f), Hex("F6D4AD"), .24f, 0f, LightShadows.None);
         }
 
-        internal GameObject CreateFloor(Vector3 bottom, Vector2 size, float height, Transform parent)
+        internal GameObject CreateFloor(Vector3 bottom, Vector2 size, float height, Transform parent, int level)
         {
-            int level = Mathf.RoundToInt(bottom.y / FloorHeight);
-            int variant = Mathf.Abs((level + level / floorMeshes.Length) % floorMeshes.Length);
-            MeshRenderer renderer = Model("Precast curtain-wall floor", parent, floorMeshes[variant], darkFloor[variant]);
+            int variant = level % floorMeshes.Length;
+            Material[] materials = variant == CrewFloor ? suspendedCrewFloor : darkFloor[variant];
+            MeshRenderer renderer = Model("Precast curtain-wall floor", parent, floorMeshes[variant], materials);
             renderer.transform.position = bottom;
             renderer.transform.localScale = new Vector3(size.x, height, size.y);
+            if (variant == CrewFloor)
+            {
+                Transform crew = Group(WindowCrewName, renderer.transform);
+                crew.gameObject.SetActive(false);
+                AddWindowWorker(crew, Vector3.back, Vector3.right, level * .37f);
+                AddWindowWorker(crew, Vector3.right, Vector3.forward, level * .37f + 1.23f);
+            }
             return renderer.gameObject;
         }
 
@@ -156,6 +184,49 @@ namespace NightShift
         {
             int variant = Array.IndexOf(floorMeshes, floor.GetComponent<MeshFilter>().sharedMesh);
             floor.GetComponent<MeshRenderer>().sharedMaterials = lit ? brightFloor[variant] : darkFloor[variant];
+            if (variant == CrewFloor)
+                floor.transform.Find(WindowCrewName).gameObject.SetActive(true);
+        }
+
+        private void AddWindowWorker(Transform parent, Vector3 outward, Vector3 along, float phase)
+        {
+            var window = Group("Window", parent);
+            Vector3 position = outward * 2.522f + along * CrewWindowOffset + Vector3.up * .254f;
+            window.localPosition = new Vector3(position.x / FloorWidth, position.y / FloorHeight, position.z / FloorWidth);
+            window.localRotation = Quaternion.LookRotation(outward);
+            // Keep the silhouette near the glazing even when seen from the side.
+            window.localScale = new Vector3(1f / FloorWidth, 1f / FloorHeight, .15f / FloorWidth);
+            MeshRenderer worker = Model("Walking worker", window, workerFrames[0], workerMaterials);
+            worker.shadowCastingMode = ShadowCastingMode.Off;
+            worker.receiveShadows = false;
+            worker.gameObject.AddComponent<NightShiftWindowWorker>().Initialize(worker, workerFrames, phase);
+        }
+
+        private static MeshBatch BuildWorkerFrame(float step, Material silhouette)
+        {
+            var shape = new MeshBatch();
+            float stride = Mathf.Sin(step) * .081f;
+            float rise = Mathf.Abs(Mathf.Cos(step)) * .015f;
+            Vector3 hips = new Vector3(0f, .257f + rise, 0f);
+            Vector3 shoulders = new Vector3(.018f, .432f + rise, 0f);
+            shape.Beam(hips, shoulders, .092f, silhouette);
+            shape.Box(shoulders + new Vector3(.025f, .065f, 0f), new Vector3(.075f, .096f, .078f), silhouette);
+            shape.Box(shoulders + new Vector3(.028f, .101f, 0f), new Vector3(.102f, .036f, .088f), silhouette);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float swing = stride * side;
+                float depth = side * .018f;
+                Vector3 foot = new Vector3(swing + .014f, .033f + Mathf.Max(0f, Mathf.Cos(step) * side) * .033f, depth);
+                Vector3 knee = new Vector3(swing * .72f + .028f, .146f, depth);
+                Vector3 elbow = new Vector3(.009f - swing * .47f, .353f + rise, depth);
+                Vector3 hand = new Vector3(.022f - swing * .83f, .278f + rise, depth);
+                shape.Beam(hips, knee, .041f, silhouette);
+                shape.Beam(knee, foot, .037f, silhouette);
+                shape.Box(foot + Vector3.right * .014f, new Vector3(.058f, .030f, .045f), silhouette);
+                shape.Beam(shoulders, elbow, .035f, silhouette);
+                shape.Beam(elbow, hand, .027f, silhouette);
+            }
+            return shape;
         }
 
         internal GameObject CreateCrane(Transform parent)
@@ -189,7 +260,7 @@ namespace NightShift
         private MeshBatch BuildFloor(int variant)
         {
             const int bays = 6;
-            const float bay = .816f;
+            const float bay = WindowBayWidth;
             const float concreteTile = 1.74f;
             var b = new MeshBatch();
             b.Slab(.014f, .153f, FloorWidth, .023f, concrete, concreteTile);
@@ -216,7 +287,15 @@ namespace NightShift
                     float crop = .035f + .052f * (pattern % 4);
                     var roomUv = new Rect(mirrored ? crop + .78f : crop, .046f, mirrored ? -.78f : .78f, .90f);
                     Vector3 center = outward * 2.512f + (side % 2 == 0 ? Vector3.right : Vector3.forward) * offset;
-                    b.Pane(center + Vector3.up * .535f, across * (bay * .5f), .335f, occupied ? warmGlass : glass, roomUv);
+                    Material pane = occupied ? warmGlass : glass;
+                    bool crewWindow = variant == CrewFloor && i == 2 && (side == 0 || side == 3);
+                    bool equipmentWindow = variant == EquipmentFloor && (i == 1 || i == 2 || i == 3);
+                    if (crewWindow || equipmentWindow)
+                    {
+                        pane = crewWindow ? crewGlass : equipmentGlass;
+                        roomUv = new Rect(0f, 0f, 1f, 1f);
+                    }
+                    b.Pane(center + Vector3.up * .535f, across * (bay * .5f), .335f, pane, roomUv);
                     b.Pane(center + Vector3.up * .941f, across * (bay * .5f), .072f, glass,
                         new Rect(crop, .78f, .78f, .16f));
 
@@ -473,6 +552,36 @@ namespace NightShift
             if (u > .24f && u < .37f && v > .69f && v < .72f)
                 room = new Color(1f, .78f, .54f);
             return room * (.79f + .27f * grain);
+        }
+
+        private static Color PaintCrewRoom(float u, float v)
+        {
+            float litWall = Mathf.Exp(-Mathf.Pow((u - .49f) * 2.4f, 2f) - Mathf.Pow((v - .61f) * 2.1f, 2f));
+            float grain = Mathf.PerlinNoise(u * 21f + 6f, v * 18f + 7f);
+            Color room = Color.Lerp(new Color(.24f, .23f, .22f), new Color(.74f, .57f, .38f), litWall);
+            if (v > .91f || v < .13f)
+                room *= .60f;
+            if (u > .17f && u < .83f && v > .86f && v < .91f)
+                room = new Color(.94f, .79f, .57f);
+            return room * (.88f + .20f * grain);
+        }
+
+        private static Color PaintEquipmentRoom(float u, float v)
+        {
+            float spill = Mathf.Exp(-Mathf.Pow((v - .77f) * 2.2f, 2f));
+            Color room = Color.Lerp(new Color(.16f, .20f, .22f), new Color(.36f, .46f, .50f), spill);
+            float cabinet = Mathf.Repeat(u * 3f, 1f);
+            if (v > .14f && v < .73f && cabinet > .08f && cabinet < .91f)
+            {
+                room *= .70f;
+                if (v > .37f && v < .61f && Mathf.Repeat(v * 35f, 1f) < .34f)
+                    room *= .73f;
+                if (v > .65f && v < .69f && cabinet > .20f && cabinet < .32f)
+                    room = new Color(.47f, .70f, .64f);
+            }
+            if (u > .10f && u < .90f && v > .82f && v < .87f)
+                room = new Color(.67f, .79f, .84f);
+            return room;
         }
 
         private static Color PaintYard(float u, float v, Texture2D asphaltSource)

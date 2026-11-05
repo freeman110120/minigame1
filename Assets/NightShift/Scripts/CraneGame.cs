@@ -199,7 +199,7 @@ namespace NightShift
             settledVisuals.Clear();
             var baseFloor = new FloorFootprint(Vector2.zero, FloorSize);
             settled.Add(baseFloor);
-            settledVisuals.Add(art.CreateFloor(Vector3.zero, FloorSize, FloorHeight, runRoot));
+            settledVisuals.Add(art.CreateFloor(Vector3.zero, FloorSize, FloorHeight, runRoot, 0));
 
             craneAnchor = NewChild("Crane lift rig", runRoot);
             crane = art.CreateCrane(craneAnchor);
@@ -232,7 +232,8 @@ namespace NightShift
         private void SpawnFloor()
         {
             swingTime = Score % 2 == 0 ? -0.82f : 0.89f;
-            suspended = art.CreateFloor(LandingPoint + Vector3.up * SuspensionGap, FloorSize, FloorHeight, runRoot);
+            suspended = art.CreateFloor(LandingPoint + Vector3.up * SuspensionGap, FloorSize, FloorHeight, runRoot,
+                settled.Count);
             suspended.name = "Suspended floor";
             craneAnchor.position = LandingPoint + Vector3.up * HookHeight;
             SetRectangle(supportOutline, settled[settled.Count - 1], LandingPoint.y + 0.035f);
@@ -380,7 +381,7 @@ namespace NightShift
             {
                 var center = new Vector2(level * offsetPerFloor, 0f);
                 var footprint = new FloorFootprint(center, FloorSize);
-                var floor = art.CreateFloor(AtHeight(center, level * FloorHeight), FloorSize, FloorHeight, runRoot);
+                var floor = art.CreateFloor(AtHeight(center, level * FloorHeight), FloorSize, FloorHeight, runRoot, level);
                 AddSettledFloor(footprint, floor, level % 3 == 0);
             }
 

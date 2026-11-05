@@ -5,12 +5,12 @@
 ## 本地试玩
 
 1. 用 Unity Hub 打开这个目录，使用 Unity 2022.3.62f2。
-2. 打开 `Assets/NightShift/Scenes/NightShift.unity`。在 Game 视图添加 1080×1920 的 Fixed Resolution，再按 Play。检查文字边缘时可最大化 Game 视图并尽量使用 1× Scale。Scene 视图的 2D 开关只切换编辑视角。
+2. 打开 `Assets/NightShift/Scenes/NightShift.unity`，从 `Tools > Night Shift > Portrait Preview (1080 x 1920)` 切到固定竖屏预览，再按 Play。也可以在 Game 视图手动添加 1080×1920 的 Fixed Resolution。检查像素时可最大化 Game 视图并使用 1× Scale。Scene 视图的 2D 开关只切换编辑视角。
 3. 选择休闲或标准模式。点击、轻触画面或按空格放下楼板。青色投影线表示当前可以落稳，橙红色表示失稳。完美对齐会点亮窗灯。
 
 休闲模式只检查新楼板和塔顶之间的支撑。标准模式还会检查下方每个接缝的累计重心。接缝接近失稳时，小图会显示安全范围和重心投影。下方接缝失稳时，镜头会对准该处，上方楼段从接缝处倾倒。两种模式分别保存最高分。
 
-目前原型包含雨后城市和随高度进入的简化低云，天堂、太空和抖音 SDK 接入是后续开发内容。
+楼层轮流出现普通窗层、暖灯工人房和冷光设备间。工人剪影在楼层落稳后出现，沿窗内走动。目前原型包含雨后城市和随高度进入的简化低云，天堂、太空和抖音 SDK 接入是后续开发内容。
 
 楼体、吊机、街区和音效由程序生成。街道和工地共用 [湿沥青](Assets/NightShift/Art/WetAsphalt.png)，楼板与横梁使用 [雨后混凝土](Assets/NightShift/Art/RainConcrete.png)，窗格使用 [带暖工灯的窗内贴图](Assets/NightShift/Art/WindowRoom.png)。贴图由内置图像生成工具制作。混凝土使用无方向光的正俯视灰色材料，窗内图使用正面观察的未完工房间。湿沥青在 Unity 中保留 Read/Write 和 Repeat，供工地材质运行时采样。
 
