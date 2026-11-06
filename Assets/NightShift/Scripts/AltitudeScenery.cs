@@ -123,47 +123,179 @@ namespace NightShift
 
         private void BuildHeaven()
         {
-            // Islands sit at fixed world positions so the tower climbs past them.
-            Temple(new Vector3(-12f, 49f, 18f), .78f);
-            Temple(new Vector3(8f, 59f, 27f), .64f);
-            Temple(new Vector3(-13f, 73f, 23f), .83f);
+            // All three terraces share one processional axis, receding into the clouds.
+            Transform palace = Group("Three terraces of the cloud palace", heaven);
+            palace.localPosition = new Vector3(-17f, 46f, 18f);
+            palace.localRotation = Quaternion.Euler(0f, -34f, 0f);
+
+            var lower = new Batch();
+            Terrace(lower, 0f, 0f, 15.8f, 9.6f);
+            Hall(lower, new Vector3(0f, .2f, -1.9f), 8.1f, 3.6f, 2.8f, 4, false);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Lantern(lower, new Vector3(side * 5.6f, .2f, -3.1f));
+                Lantern(lower, new Vector3(side * 5.6f, .2f, 2.9f));
+            }
+            Model("Lower terrace and ceremonial gate", palace, lower);
+
+            var middle = new Batch();
+            Terrace(middle, 7.2f, 16f, 19.6f, 11f);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Hall(middle, new Vector3(side * 5.75f, 7.4f, 16.2f), 5.9f, 4.5f, 3.3f, 3, true);
+                Lantern(middle, new Vector3(side * 2.3f, 7.4f, 13.3f));
+                Lantern(middle, new Vector3(side * 2.3f, 7.4f, 19.6f));
+            }
+            Model("Middle court and paired golden pavilions", palace, middle);
+
+            var upper = new Batch();
+            Terrace(upper, 16.4f, 35f, 21.4f, 13.4f);
+            Hall(upper, new Vector3(0f, 17.1f, 36.1f), 12.5f, 6.1f, 4.35f, 6, true);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Hall(upper, new Vector3(side * 8.1f, 16.6f, 32f), 3.5f, 3.4f, 2.8f, 2, true);
+                Lantern(upper, new Vector3(side * 3.6f, 16.6f, 30.8f));
+            }
+            upper.Box(new Vector3(0f, 16.66f, 33.2f), new Vector3(7.2f, .5f, 5.1f), ivory);
+            Model("Upper sanctuary and crowned main hall", palace, upper);
+
+            var stairs = new Batch();
+            Stairway(stairs, 4.4f, .17f, 10.85f, 7.37f, 4.2f);
+            Stairway(stairs, 21.1f, 7.37f, 28.85f, 16.57f, 4.8f);
+            Model("Golden stair bridges between terraces", palace, stairs);
         }
 
-        private void Temple(Vector3 position, float scale)
+        private void Terrace(Batch mesh, float y, float z, float width, float depth)
         {
-            Transform island = Group("Floating golden temple", heaven);
-            island.localPosition = position;
-            island.localScale = Vector3.one * scale;
-            island.localRotation = Quaternion.Euler(0f, -18f, 0f);
-            var mesh = new Batch();
+            mesh.Box(new Vector3(0f, y - .2f, z), new Vector3(width, .55f, depth), ivory);
+            mesh.Box(new Vector3(0f, y - .53f, z), new Vector3(width + .35f, .16f, depth + .28f), gold);
+            mesh.Box(new Vector3(0f, y - .91f, z), new Vector3(width - .95f, .66f, depth - .75f), mist);
+            mesh.Box(new Vector3(0f, y - 1.43f, z), new Vector3(width - 2.65f, .42f, depth - 1.65f), ivory);
+            mesh.Box(new Vector3(0f, y + .09f, z), new Vector3(3.6f, .042f, depth - .1f), gold);
             for (int i = 0; i < 7; i++)
             {
-                float angle = i * Mathf.PI * 2f / 7f;
-                mesh.Ellipsoid(new Vector3(Mathf.Cos(angle) * 5.2f, -.5f, Mathf.Sin(angle) * 3.6f),
-                    new Vector3(3.35f, 1.6f + i % 3 * .24f, 2.6f), i % 2 == 0 ? mist : ivory);
+                float x = (i - 3f) * width * .135f;
+                mesh.Ellipsoid(new Vector3(x, y - 2.05f - i % 3 * .24f, z + (i % 2 - .5f) * depth * .46f),
+                    new Vector3(width * .17f, 1.06f + i % 3 * .23f, depth * .33f), i % 2 == 0 ? mist : ivory, 16, 8);
             }
-            for (int step = 0; step < 4; step++)
-                mesh.Box(new Vector3(0f, step * .22f, 0f),
-                    new Vector3(12f - step * .82f, .25f, 7.1f - step * .58f), step % 2 == 0 ? gold : ivory);
             for (int side = -1; side <= 1; side += 2)
-            for (int column = -2; column <= 2; column++)
             {
-                float x = column * 1.96f;
-                float z = side * 2.23f;
-                mesh.Box(new Vector3(x, .91f, z), new Vector3(.73f, .23f, .73f), amber);
-                mesh.Box(new Vector3(x, 2.53f, z), new Vector3(.43f, 3.05f, .43f), ivory);
-                mesh.Box(new Vector3(x, 1.24f, z), new Vector3(.58f, .13f, .58f), gold);
-                mesh.Box(new Vector3(x, 3.88f, z), new Vector3(.58f, .13f, .58f), amber);
-                mesh.Box(new Vector3(x, 4.08f, z), new Vector3(.76f, .28f, .76f), gold);
+                float x = side * (width * .5f - .27f);
+                Balustrade(mesh, new Vector3(x, y + .09f, z - depth * .5f + .26f),
+                    new Vector3(x, y + .09f, z + depth * .5f - .26f), 6);
+                for (int edge = -1; edge <= 1; edge += 2)
+                {
+                    float edgeZ = z + edge * (depth * .5f - .25f);
+                    Balustrade(mesh, new Vector3(side * 2.55f, y + .09f, edgeZ),
+                        new Vector3(x, y + .09f, edgeZ), 4);
+                }
             }
-            mesh.Box(new Vector3(0f, 4.37f, 0f), new Vector3(10.35f, .46f, 5.55f), amber);
+        }
+
+        private void Hall(Batch mesh, Vector3 origin, float width, float depth, float height, int columns, bool doubleRoof)
+        {
+            mesh.Box(origin + Vector3.down * .09f, new Vector3(width + .43f, .18f, depth + .43f), gold);
+            for (int side = -1; side <= 1; side += 2)
+            for (int i = 0; i < columns; i++)
+            {
+                float x = Mathf.Lerp(-width * .43f, width * .43f, i / (columns - 1f));
+                Vector3 foot = origin + new Vector3(x, 0f, side * depth * .4f);
+                mesh.Box(foot + Vector3.up * .11f, new Vector3(.56f, .22f, .56f), gold);
+                mesh.Box(foot + Vector3.up * height * .5f, new Vector3(.35f, height, .35f), ivory);
+                mesh.Box(foot + Vector3.up * (height - .16f), new Vector3(.59f, .25f, .59f), amber);
+            }
+            mesh.Box(origin + Vector3.up * (height - .14f), new Vector3(width, .27f, depth), gold);
+            if (width >= 10f)
+            {
+                mesh.Box(origin + new Vector3(0f, height * .47f, depth * .32f),
+                    new Vector3(width * .79f, height * .94f, .22f), gold);
+                for (int door = -2; door <= 2; door++)
+                {
+                    Vector3 panel = origin + new Vector3(door * width * .145f, height * .39f, depth * .32f - .13f);
+                    mesh.Box(panel, new Vector3(.92f, height * .76f, .055f), ivory);
+                    mesh.Box(panel + new Vector3(0f, 0f, -.042f), new Vector3(.58f, height * .67f, .045f), gold);
+                    mesh.Ellipsoid(panel + new Vector3(0f, .08f, -.08f), new Vector3(.11f, .16f, .036f), amber);
+                }
+            }
+            Roof(mesh, origin + Vector3.up * height, width, depth);
+            if (doubleRoof)
+            {
+                mesh.Box(origin + Vector3.up * (height + .97f), new Vector3(width * .65f, .56f, depth * .55f), ivory);
+                Roof(mesh, origin + Vector3.up * (height + 1.28f), width * .74f, depth * .7f);
+                if (width >= 10f)
+                {
+                    Vector3 crown = origin + Vector3.up * (height + 2.63f);
+                    mesh.Ellipsoid(crown, new Vector3(.45f, .36f, .45f), gold);
+                    mesh.Beam(crown, crown + Vector3.up * .87f, .092f, amber);
+                    mesh.Ellipsoid(crown + Vector3.up * .87f, Vector3.one * .14f, amber);
+                }
+            }
+        }
+
+        private void Roof(Batch mesh, Vector3 basePoint, float width, float depth)
+        {
+            mesh.Box(basePoint, new Vector3(width + .88f, .15f, depth + .94f), amber);
             for (int tier = 0; tier < 5; tier++)
-                mesh.Box(new Vector3(0f, 4.72f + tier * .25f, 0f),
-                    new Vector3(10f - tier * .35f, .28f, 5.25f - tier * .96f), tier == 4 ? amber : gold);
-            mesh.Ellipsoid(new Vector3(0f, 6f, 0f), new Vector3(1.3f, .69f, 1.25f), gold);
-            mesh.Beam(new Vector3(0f, 6.45f, 0f), new Vector3(0f, 7.5f, 0f), .12f, amber);
-            mesh.Ellipsoid(new Vector3(0f, 7.52f, 0f), Vector3.one * .19f, amber);
-            Model("Colonnade and cloud island", island, mesh);
+            {
+                float amount = (tier + 1f) / 5f;
+                mesh.Box(basePoint + Vector3.up * (.13f + amount * .71f),
+                    new Vector3(width + .76f - amount * .69f, .18f, depth * (1f - amount * .91f) + .59f),
+                    tier == 4 ? amber : gold);
+            }
+            int ribs = Mathf.FloorToInt(width / 1.15f);
+            for (int rib = -ribs / 2; rib <= ribs / 2; rib++)
+            {
+                Vector3 ridge = basePoint + new Vector3(rib * .92f, .96f, 0f);
+                for (int end = -1; end <= 1; end += 2)
+                    mesh.Beam(ridge, basePoint + new Vector3(rib * .92f, .14f, end * (depth * .5f + .38f)),
+                        .057f, amber);
+            }
+            for (int side = -1; side <= 1; side += 2)
+            for (int end = -1; end <= 1; end += 2)
+            {
+                Vector3 corner = basePoint + new Vector3(side * (width * .5f + .32f), .05f, end * (depth * .5f + .37f));
+                mesh.Beam(corner, corner + new Vector3(side * .52f, .37f, end * .12f), .12f, gold);
+                mesh.Ellipsoid(corner + new Vector3(side * .52f, .37f, end * .12f), Vector3.one * .12f, amber);
+            }
+            mesh.Ellipsoid(basePoint + Vector3.up * .98f, new Vector3(.24f, .28f, .24f), amber);
+        }
+
+        private void Stairway(Batch mesh, float fromZ, float fromY, float toZ, float toY, float width)
+        {
+            const int steps = 22;
+            float tread = (toZ - fromZ) / steps;
+            float rise = (toY - fromY) / steps;
+            for (int i = 0; i < steps; i++)
+            {
+                var point = new Vector3(0f, fromY + rise * (i + .5f), fromZ + tread * (i + .5f));
+                mesh.Box(point - Vector3.up * .1f, new Vector3(width, rise + .24f, tread + .04f), ivory);
+                mesh.Box(point + new Vector3(0f, rise * .5f + .025f, -.12f),
+                    new Vector3(width + .035f, .067f, .11f), gold);
+            }
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float x = side * (width * .5f - .11f);
+                Balustrade(mesh, new Vector3(x, fromY, fromZ), new Vector3(x, toY, toZ), 9);
+            }
+        }
+
+        private void Balustrade(Batch mesh, Vector3 start, Vector3 end, int posts)
+        {
+            Vector3 top = Vector3.up * .63f;
+            mesh.Beam(start + top, end + top, .092f, gold);
+            for (int i = 0; i <= posts; i++)
+            {
+                Vector3 point = Vector3.Lerp(start, end, i / (float)posts);
+                mesh.Box(point + top * .49f, new Vector3(.105f, .63f, .105f), ivory);
+                mesh.Box(point + top, new Vector3(.15f, .12f, .15f), amber);
+            }
+        }
+
+        private void Lantern(Batch mesh, Vector3 point)
+        {
+            mesh.Box(point + Vector3.up * .34f, new Vector3(.14f, .68f, .14f), gold);
+            mesh.Box(point + Vector3.up * .78f, new Vector3(.27f, .28f, .27f), amber);
+            mesh.Box(point + Vector3.up * .96f, new Vector3(.39f, .095f, .39f), gold);
         }
 
         private void BuildOrbit()
