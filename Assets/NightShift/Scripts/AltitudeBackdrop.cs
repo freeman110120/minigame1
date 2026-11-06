@@ -6,6 +6,8 @@ namespace NightShift
 {
     internal sealed class AltitudeBackdrop
     {
+        private const int LowCloudCount = 17;
+
         private readonly struct Atmosphere
         {
             internal readonly Color Sky;
@@ -47,7 +49,11 @@ namespace NightShift
             new HeightBand(35f, 44f, new Atmosphere(
                 new Color(0.20f, 0.26f, 0.33f), new Color(0.26f, 0.33f, 0.41f), 25f, 57f)),
             new HeightBand(45f, 58f, new Atmosphere(
-                new Color(0.43f, 0.51f, 0.59f), new Color(0.45f, 0.52f, 0.59f), 32f, 79f))
+                new Color(0.43f, 0.51f, 0.59f), new Color(0.45f, 0.52f, 0.59f), 32f, 79f)),
+            new HeightBand(AltitudeScenery.HeavenHeight - 6f, AltitudeScenery.HeavenHeight, new Atmosphere(
+                new Color(0.68f, 0.59f, 0.53f), new Color(0.73f, 0.63f, 0.53f), 39f, 103f)),
+            new HeightBand(AltitudeScenery.OrbitHeight - 12f, AltitudeScenery.OrbitHeight, new Atmosphere(
+                new Color(0.023f, 0.030f, 0.076f), new Color(0.039f, 0.052f, 0.103f), 76f, 132f))
         };
 
         private readonly Transform city;
@@ -55,10 +61,12 @@ namespace NightShift
         private readonly List<Transform> clouds = new List<Transform>();
         private readonly Material cloudMaterial;
         private readonly Texture2D cloudTexture;
+        private readonly AltitudeScenery scenery;
 
-        internal AltitudeBackdrop(Transform parent, Transform city, Shader shader)
+        internal AltitudeBackdrop(Transform parent, Transform city, Shader shader, Shader unlitShader)
         {
             this.city = city;
+            scenery = new AltitudeScenery(parent, unlitShader);
             cloudRoot = new GameObject("World-space low cloud band").transform;
             cloudRoot.SetParent(parent, false);
             shader = shader != null ? shader : Shader.Find("Unlit/Transparent");
@@ -67,15 +75,16 @@ namespace NightShift
             cloudTexture = CreateCloudTexture();
             cloudMaterial = new Material(shader) { name = "Procedural cloud softness", mainTexture = cloudTexture };
             var random = new System.Random(8761);
-            for (int i = 0; i < 17; i++)
+            for (int i = 0; i < LowCloudCount + 14; i++)
             {
-                float angle = (i / 17f) * Mathf.PI * 2f;
-                float radius = 12f + (float)random.NextDouble() * 25f;
+                bool low = i < LowCloudCount;
+                float angle = low ? (i / (float)LowCloudCount) * Mathf.PI * 2f : 1.4f + (i - LowCloudCount) * .13f;
+                float radius = (low ? 12f : 21f) + (float)random.NextDouble() * 25f;
                 var cloud = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 cloud.name = "Cloud bank " + (i + 1);
                 cloud.transform.SetParent(cloudRoot, false);
                 cloud.transform.position = new Vector3(Mathf.Cos(angle) * radius,
-                    31f + (float)random.NextDouble() * 8f, Mathf.Sin(angle) * radius);
+                    (low ? 31f : 46f) + (float)random.NextDouble() * 8f, Mathf.Sin(angle) * radius);
                 cloud.transform.localScale = new Vector3(13f + (float)random.NextDouble() * 15f,
                     3.6f + (float)random.NextDouble() * 3.5f, 1f);
                 var renderer = cloud.GetComponent<Renderer>();
@@ -105,12 +114,18 @@ namespace NightShift
             RenderSettings.fogColor = look.Fog;
             RenderSettings.fogStartDistance = look.Near;
             RenderSettings.fogEndDistance = look.Far;
-            bool showClouds = height >= 35f;
+            bool showClouds = height >= 35f && height < AltitudeScenery.OrbitHeight;
             cloudRoot.gameObject.SetActive(showClouds);
             if (showClouds)
             {
-                foreach (Transform cloud in clouds)
+                for (int i = 0; i < clouds.Count; i++)
                 {
+                    Transform cloud = clouds[i];
+                    bool visible = i < LowCloudCount || height >= AltitudeScenery.HeavenHeight - 4f;
+                    if (cloud.gameObject.activeSelf != visible)
+                        cloud.gameObject.SetActive(visible);
+                    if (!visible)
+                        continue;
                     Vector3 forward = cloud.position - camera.transform.position;
                     if (forward.sqrMagnitude > 0.01f)
                         cloud.rotation = Quaternion.LookRotation(forward);
@@ -118,10 +133,12 @@ namespace NightShift
             }
             if (city != null)
                 city.gameObject.SetActive(height < 66f);
+            scenery.Apply(camera);
         }
 
         internal void Dispose()
         {
+            scenery.Dispose();
             Object.Destroy(cloudMaterial);
             Object.Destroy(cloudTexture);
         }

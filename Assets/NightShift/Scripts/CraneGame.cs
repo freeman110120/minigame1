@@ -70,6 +70,8 @@ namespace NightShift
         private float phaseTime;
         private int inputArmedFrame;
         private int bestScore;
+        private Vector2 towerWeightedCenter;
+        private float towerArea;
         private bool paused;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private NightShiftDebugPanel debugPanel;
@@ -89,7 +91,7 @@ namespace NightShift
             art = new NightShiftArt(transform, surfaceShader, unlitShader, wetAsphalt, rainConcrete, windowRoom);
             if (landingGlowShader != null)
                 supportHaloMaterial = new Material(landingGlowShader) { name = "Warm roof halo" };
-            backdrop = new AltitudeBackdrop(transform, art.CityRoot, cloudShader);
+            backdrop = new AltitudeBackdrop(transform, art.CityRoot, cloudShader, unlitShader);
             var view = new GameObject("Tower camera");
             view.transform.SetParent(transform, false);
             view.tag = "MainCamera";
@@ -200,6 +202,9 @@ namespace NightShift
             settledVisuals.Clear();
             var baseFloor = new FloorFootprint(Vector2.zero, FloorSize);
             settled.Add(baseFloor);
+            towerWeightedCenter = baseFloor.Center * baseFloor.Area;
+            towerArea = baseFloor.Area;
+            hud.SetTowerCenter(baseFloor.Center, baseFloor);
             settledVisuals.Add(art.CreateFloor(Vector3.zero, FloorSize, FloorHeight, runRoot, 0));
             art.SetFloorLit(settledVisuals[0], false);
 
@@ -321,6 +326,9 @@ namespace NightShift
         private void AddSettledFloor(FloorFootprint footprint, GameObject visual, bool lit)
         {
             settled.Add(footprint);
+            towerWeightedCenter += footprint.Center * footprint.Area;
+            towerArea += footprint.Area;
+            hud.SetTowerCenter(towerWeightedCenter / towerArea, settled[0]);
             settledVisuals.Add(visual);
             visual.name = "Floor " + Score;
             art.SetFloorLit(visual, lit);

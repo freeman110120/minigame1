@@ -371,6 +371,13 @@ namespace NightShift
                 Face(b, side, 0f, .871f, 2.529f, 4.968f, .035f, .047f, mullion);
                 Face(b, side, 0f, 1.006f, 2.54f, 5.01f, .035f, .055f, flashing);
                 Face(b, side, 0f, .183f, 2.54f, 5.01f, .045f, .068f, flashing);
+                if ((variant + side) % 4 == 0)
+                    Face(b, side, 0f, 1.094f, 2.584f, 4.94f, .065f, .032f, flashing);
+                if ((variant + side) % 3 == 0)
+                {
+                    for (int fin = -2; fin <= 2; fin++)
+                        Face(b, side, fin * 1.03f, .584f, 2.561f, .047f, .772f, .07f, flashing);
+                }
             }
 
             int roofPattern = variant % 3;
@@ -509,6 +516,58 @@ namespace NightShift
                 yard.Box(new Vector3(6.28f + i * .31f, .011f, -.2f), new Vector3(.11f, .011f, 1.02f),
                     trafficPaint, Quaternion.Euler(0f, -29f, 0f));
             AddBatch("Site fence, work lamps and service equipment", CityRoot, yard);
+            BuildStreetscape();
+        }
+
+        private void BuildStreetscape()
+        {
+            Material paving = Surface("Wet sidewalk stone", Hex("64717A"), .03f, .36f);
+            Material bark = Surface("Street tree bark", Hex("42392D"), 0f, .2f);
+            Material leaves = Surface("Rain-dark street trees", Hex("334937"), 0f, .28f);
+            Material carPaint = Surface("Parked vehicle paint", Hex("8A4E37"), .32f, .65f);
+            Material markings = Surface("Worn road paint", Hex("ADB4AD"), 0f, .42f);
+            Material tail = Surface("Vehicle tail lamps", Hex("AA3031"), 0f, .34f, Hex("F34B32") * .24f);
+            var street = new MeshBatch();
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float z = side * 11.1f;
+                street.Box(new Vector3(0f, -.015f, z), new Vector3(26f, .22f, 1.7f), paving);
+                for (int i = -3; i <= 3; i++)
+                {
+                    float x = i * 3.9f + side * .35f;
+                    street.Box(new Vector3(x, .14f, z), new Vector3(1.22f, .11f, 1.26f), cityWall);
+                    street.Beam(new Vector3(x, .15f, z), new Vector3(x + .12f, 2.45f, z), .15f, bark);
+                    for (int crown = 0; crown < 4; crown++)
+                    {
+                        float angle = crown * 1.8f + i * .7f;
+                        street.Ellipsoid(new Vector3(x + Mathf.Sin(angle) * .49f, 2.48f + crown * .21f,
+                            z + Mathf.Cos(angle) * .39f), new Vector3(.68f, .84f, .66f), leaves);
+                    }
+                    street.Box(new Vector3(i * 4.1f, -.052f, side * 14.9f), new Vector3(1.75f, .015f, .1f), markings);
+                }
+                for (int stripe = 0; stripe < 7; stripe++)
+                    street.Box(new Vector3(10.9f + stripe * .35f, -.05f, side * 14.6f),
+                        new Vector3(.17f, .016f, 4.65f), markings);
+
+                for (int car = 0; car < 3; car++)
+                {
+                    float x = -8.2f + car * 5.2f + side * .6f;
+                    Vector3 center = new Vector3(x, .28f, side * 12.65f);
+                    street.Box(center, new Vector3(2.25f, .42f, 1.04f), car % 2 == 0 ? carPaint : flashing);
+                    street.Box(center + new Vector3(-.12f, .29f, 0f), new Vector3(1.22f, .31f, .92f), cityGlass);
+                    street.Box(center + new Vector3(-.15f, .46f, 0f), new Vector3(.97f, .08f, .83f), carPaint);
+                    for (int wheel = -1; wheel <= 1; wheel += 2)
+                    {
+                        street.Ellipsoid(center + new Vector3(wheel * .69f, -.18f, -.51f),
+                            new Vector3(.23f, .23f, .12f), mullion);
+                        street.Ellipsoid(center + new Vector3(wheel * .69f, -.18f, .51f),
+                            new Vector3(.23f, .23f, .12f), mullion);
+                        street.Box(center + new Vector3(1.13f, .04f, wheel * .35f), new Vector3(.035f, .10f, .22f), tail);
+                        street.Box(center + new Vector3(-1.13f, .04f, wheel * .35f), new Vector3(.035f, .10f, .22f), markings);
+                    }
+                }
+            }
+            AddBatch("Sidewalks, crosswalks, parked cars and street trees", CityRoot, street);
         }
 
         private void Building(MeshBatch b, float x, float z, float width, float depth, float height, int floors, int bays)
@@ -518,6 +577,18 @@ namespace NightShift
             b.Box(new Vector3(x, height + .075f, z), new Vector3(width + .16f, .15f, depth + .16f), cityWall);
             b.Box(new Vector3(x - width * .18f, height + .49f, z + depth * .12f),
                 new Vector3(width * .35f, .98f, depth * .37f), cityWall);
+            for (int vent = 0; vent < 2; vent++)
+            {
+                Vector3 unit = new Vector3(x + width * .23f, height + .27f, z + (vent - .5f) * depth * .34f);
+                b.Box(unit, new Vector3(width * .18f, .39f, depth * .18f), flashing);
+                b.Box(unit + Vector3.up * .21f, new Vector3(width * .12f, .06f, depth * .12f), mullion);
+            }
+            if (floors >= 7)
+            {
+                var mast = new Vector3(x - width * .18f, height + .98f, z + depth * .12f);
+                b.Beam(mast, mast + Vector3.up * 2.15f, .065f, flashing);
+                b.Box(mast + Vector3.up * 2.15f, Vector3.one * .13f, GuideMaterial);
+            }
             float story = height / (floors + .65f);
             float south = z - depth * .5f;
             float east = x + width * .5f;
@@ -796,7 +867,7 @@ namespace NightShift
             return color;
         }
 
-        private sealed class MeshBatch
+        internal sealed class MeshBatch
         {
             // Each entry supplies the right and up axes of a visible side.
             private static readonly Vector3[] FaceRight =
@@ -854,6 +925,33 @@ namespace NightShift
             {
                 AddFace(center, across, Vector3.up * halfHeight, Vector3.Cross(across, Vector3.up).normalized,
                     uvBounds, GetTriangles(material));
+            }
+
+            internal void Ellipsoid(Vector3 center, Vector3 radii, Material material, int meridians = 12, int bands = 6)
+            {
+                var triangles = GetTriangles(material);
+                var inverseRadii = new Vector3(1f / radii.x, 1f / radii.y, 1f / radii.z);
+                for (int y = 0; y <= bands; y++)
+                for (int x = 0; x <= meridians; x++)
+                {
+                    float phi = Mathf.PI * y / bands;
+                    float theta = 2f * Mathf.PI * x / meridians;
+                    var direction = new Vector3(Mathf.Cos(theta) * Mathf.Sin(phi), Mathf.Cos(phi),
+                        Mathf.Sin(theta) * Mathf.Sin(phi));
+                    int index = vertices.Count;
+                    vertices.Add(center + Vector3.Scale(direction, radii));
+                    normals.Add(Vector3.Scale(direction, inverseRadii).normalized);
+                    uv.Add(new Vector2(x / (float)meridians, y / (float)bands));
+                    if (x == 0 || y == 0)
+                        continue;
+                    int previous = index - meridians - 1;
+                    triangles.Add(previous - 1);
+                    triangles.Add(previous);
+                    triangles.Add(index - 1);
+                    triangles.Add(previous);
+                    triangles.Add(index);
+                    triangles.Add(index - 1);
+                }
             }
 
             internal void Slab(float bottom, float top, float width, float bevel, Material material, float tileWidth)

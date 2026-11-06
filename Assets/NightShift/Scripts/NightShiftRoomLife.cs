@@ -20,6 +20,7 @@ namespace NightShift
 
         internal RoomLifeLibrary(Shader shader)
         {
+            shader = Shader.Find("Unlit/Color") ?? shader;
             resident = new Material(shader) { name = "Residents in silhouette", color = new Color(.10f, .13f, .15f) };
             furnishing = new Material(shader) { name = "Apartment furnishings", color = new Color(.16f, .18f, .18f) };
             screen = new Material(shader) { name = "Apartment screen glow", color = new Color(.40f, .61f, .69f) };
@@ -359,7 +360,9 @@ namespace NightShift
             internal void Polygon(Vector2[] points, int material = 0)
             {
                 int start = vertices.Count;
-                foreach (Vector2 point in points) vertices.Add(new Vector3(point.x, point.y, depth));
+                // Separate the screen face from its casing to prevent depth flicker at oblique angles.
+                float plane = material == 1 ? depth + .004f : depth;
+                foreach (Vector2 point in points) vertices.Add(new Vector3(point.x, point.y, plane));
                 for (int i = 1; i < points.Length - 1; i++)
                 {
                     triangles[material].Add(start);

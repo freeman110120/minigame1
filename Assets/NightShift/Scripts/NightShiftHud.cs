@@ -34,6 +34,8 @@ namespace NightShift
         private readonly RectTransform contactRegion;
         private readonly RectTransform safeRegion;
         private readonly RectTransform loadMarker;
+        private readonly RectTransform towerCenter;
+        private readonly RectTransform towerCenterMarker;
         private readonly Image loadMarkerFill;
         private readonly TMP_FontAsset font;
         private readonly TMP_FontAsset displayFont;
@@ -104,6 +106,16 @@ namespace NightShift
             stabilityText.fontStyle = FontStyles.Bold;
             FitSingleLine(stabilityText, 30);
 
+            towerCenter = Panel("Settled tower center", safeArea, new Vector2(1f, .5f),
+                -24f, 150f, 152f, 160f, Plot, 24);
+            Label("Center label", chinese ? "重心" : "CENTER", towerCenter, Top,
+                0f, -8f, 134f, 39f, chinese ? 30 : 23, Color.white);
+            var basePlot = Panel("Base footprint", towerCenter, Bottom, 0f, 16f, 86f, 86f, Contact, 9);
+            Panel("Safe inset", basePlot, Center, 0f, 0f, 80f, 80f, DarkButton, 7);
+            Panel("Horizontal axis", basePlot, Center, 0f, 0f, 74f, 2f, Contact);
+            Panel("Vertical axis", basePlot, Center, 0f, 0f, 2f, 74f, Contact);
+            towerCenterMarker = Panel("Current center marker", basePlot, Center, 0f, 0f, 16f, 16f, Amber, 8);
+
             SetReady(0, 0);
         }
 
@@ -112,6 +124,7 @@ namespace NightShift
             UpdateSafeArea();
             ClearMenuSelection();
             scoreText.gameObject.SetActive(false);
+            towerCenter.gameObject.SetActive(false);
             ready.gameObject.SetActive(true);
             ended.gameObject.SetActive(false);
             SetStability(null, string.Empty, false);
@@ -123,6 +136,7 @@ namespace NightShift
             mode = gameMode;
             SetScore(score, best);
             scoreText.gameObject.SetActive(true);
+            towerCenter.gameObject.SetActive(gameMode == GameMode.Standard);
             ready.gameObject.SetActive(false);
             ended.gameObject.SetActive(false);
             stability.anchoredPosition = new Vector2(0f, PlayingStabilityY);
@@ -133,6 +147,7 @@ namespace NightShift
         {
             UpdateSafeArea();
             scoreText.gameObject.SetActive(false);
+            towerCenter.gameObject.SetActive(false);
             ready.gameObject.SetActive(false);
             ended.gameObject.SetActive(true);
             stability.anchoredPosition = new Vector2(0f, ResultsStabilityY);
@@ -147,6 +162,16 @@ namespace NightShift
         {
             UpdateSafeArea();
             scoreText.text = score.ToString("D3");
+        }
+
+        internal void SetTowerCenter(Vector2 center, FloorFootprint foundation)
+        {
+            Vector2 normalized = (center - foundation.Center) / foundation.Size;
+            towerCenterMarker.anchoredPosition = new Vector2(Mathf.Clamp(normalized.x, -.56f, .56f),
+                Mathf.Clamp(normalized.y, -.56f, .56f)) * 86f;
+            bool outside = Mathf.Abs(center.x - foundation.Center.x) > foundation.Size.x * .5f - StackRules.SupportEdgeInset ||
+                Mathf.Abs(center.y - foundation.Center.y) > foundation.Size.y * .5f - StackRules.SupportEdgeInset;
+            towerCenterMarker.GetComponent<Image>().color = outside ? Coral : Amber;
         }
 
         internal void SetStability(SupportJoint? joint, string message, bool unstable)
