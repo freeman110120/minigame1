@@ -11,10 +11,14 @@ namespace NightShift
         private const float FloorWidth = 5.2f;
         private const float FloorHeight = 1.2f;
         private const float WindowBayWidth = .816f;
-        private const float CrewWindowOffset = -.5f * WindowBayWidth;
-        private const int CrewFloor = 1;
-        private const int EquipmentFloor = 2;
-        private const string WindowCrewName = "Window crew";
+        private const string LifeRootName = "Apartment life";
+        // Values 0-5 are south-facing bays and 6-11 are east-facing bays.
+        private static readonly int[][] RoomSlots =
+        {
+            new[] { 1, 8 }, new[] { 3, 10, 0 }, new[] { 4, 7 }, new[] { 0, 9, 5 },
+            new[] { 2, 11 }, new[] { 5, 6, 9 }, new[] { 1, 10, 4 }, new[] { 3, 6 },
+            new[] { 0, 8 }, new[] { 2, 7, 10 }, new[] { 4, 11, 1 }, new[] { 5, 9 }
+        };
         private const float YardWidth = 19f;
         private const float StreetWidth = 110f;
         private const float AsphaltTileWidth = 5.5f;
@@ -29,8 +33,7 @@ namespace NightShift
         private readonly Material glass;
         private readonly Material warmGlass;
         private readonly Material idleGlass;
-        private readonly Material crewGlass;
-        private readonly Material equipmentGlass;
+        private readonly Material[] apartmentGlass = new Material[4];
         private readonly Material mullion;
         private readonly Material flashing;
         private readonly Material roof;
@@ -41,15 +44,18 @@ namespace NightShift
         private readonly Material cityWall;
         private readonly Material cityGlass;
         private readonly Material cityWindow;
-        private readonly Mesh[] floorMeshes = new Mesh[3];
-        private readonly Mesh[] workerFrames = new Mesh[8];
-        private readonly Material[] workerMaterials;
-        private readonly Material[] suspendedCrewFloor;
+        private readonly Mesh[] floorMeshes = new Mesh[RoomSlots.Length];
+        private readonly RoomLifeLibrary roomLife;
+        private readonly List<FloorSelection> floorSelections = new List<FloorSelection>();
+        private System.Random lifeRandom;
+        private ShuffledPool layoutPool;
+        private ShuffledPool activityPool;
         private readonly Mesh craneMesh;
         private readonly Mesh trolleyMesh;
         private readonly Mesh hookMesh;
-        private readonly Material[][] darkFloor = new Material[3][];
-        private readonly Material[][] brightFloor = new Material[3][];
+        private readonly Material[][] darkFloor = new Material[RoomSlots.Length][];
+        private readonly Material[][] brightFloor = new Material[RoomSlots.Length][];
+        private readonly Material[][] airborneFloor = new Material[RoomSlots.Length][];
         private readonly Material[] craneMaterials;
         private readonly Material[] trolleyMaterials;
         private readonly Material[] hookMaterials;
@@ -81,10 +87,13 @@ namespace NightShift
             glass = RoomGlass("Rainy blue glazing", room, Hex("475F71"), Hex("1B2933"), .65f);
             idleGlass = RoomGlass("Unfinished room under work light", room, Hex("83776C"), Hex("E9BA8C") * .45f, .53f);
             warmGlass = RoomGlass("Amber-lit construction room", room, Hex("A3988C"), Hex("FFDBB8") * .90f, .53f);
-            crewGlass = RoomGlass("Backlit crew room", PaintTexture("Crew room with work lights", 96, PaintCrewRoom),
-                Hex("B49B80"), Hex("FFC489") * .58f, .44f);
-            equipmentGlass = RoomGlass("Cool equipment room", PaintTexture("Equipment room cabinets", 96, PaintEquipmentRoom),
-                Hex("8597A3"), Hex("BCD9F3") * .46f, .47f);
+            for (int i = 0; i < apartmentGlass.Length; i++)
+            {
+                int palette = i;
+                apartmentGlass[i] = RoomGlass("Apartment evening light " + i,
+                    PaintTexture("Apartment wall " + i, 128, (u, v) => PaintApartmentRoom(u, v, palette)),
+                    Hex("D1C9BA"), Color.white * .62f, .40f);
+            }
             mullion = Surface("Dark weathered steel", Hex("30383C"), .18f, .47f);
             flashing = Surface("Wet galvanized edge flashing", Hex("52606A"), .25f, .56f);
             cranePaint = Surface("Weathered ochre", Hex("C58B3F"), .18f, .46f);
@@ -128,14 +137,13 @@ namespace NightShift
                 brightFloor[i] = floor.Materials.ToArray();
                 darkFloor[i] = (Material[])brightFloor[i].Clone();
                 darkFloor[i][Array.IndexOf(darkFloor[i], warmGlass)] = idleGlass;
+                airborneFloor[i] = (Material[])darkFloor[i].Clone();
+                for (int material = 0; material < airborneFloor[i].Length; material++)
+                    if (Array.IndexOf(apartmentGlass, airborneFloor[i][material]) >= 0)
+                        airborneFloor[i][material] = glass;
             }
-            suspendedCrewFloor = (Material[])darkFloor[CrewFloor].Clone();
-            suspendedCrewFloor[Array.IndexOf(suspendedCrewFloor, crewGlass)] = glass;
-            var silhouette = Own(new Material(this.unlitShader) { name = "Backlit worker silhouette", color = Hex("22282D") });
-            workerMaterials = new[] { silhouette };
-            for (int i = 0; i < workerFrames.Length; i++)
-                workerFrames[i] = Own(BuildWorkerFrame(i * Mathf.PI * 2f / workerFrames.Length, silhouette)
-                    .CreateMesh("Worker gait frame " + i));
+            roomLife = new RoomLifeLibrary(this.unlitShader);
+            BeginRun(0);
 
             MeshBatch crane = BuildCrane();
             craneMesh = Own(crane.CreateMesh("Lattice crane jib"));
@@ -163,20 +171,25 @@ namespace NightShift
                 Quaternion.Euler(34f, 137f, 0f), Hex("F6D4AD"), .24f, 0f, LightShadows.None);
         }
 
+        internal void BeginRun(int seed)
+        {
+            lifeRandom = new System.Random(seed);
+            layoutPool = new ShuffledPool(RoomSlots.Length, lifeRandom);
+            activityPool = new ShuffledPool(RoomLifeLibrary.ActivityCount, lifeRandom);
+            floorSelections.Clear();
+        }
+
         internal GameObject CreateFloor(Vector3 bottom, Vector2 size, float height, Transform parent, int level)
         {
-            int variant = level % floorMeshes.Length;
-            Material[] materials = variant == CrewFloor ? suspendedCrewFloor : darkFloor[variant];
-            MeshRenderer renderer = Model("Precast curtain-wall floor", parent, floorMeshes[variant], materials);
+            FloorSelection selection = GetFloorSelection(Mathf.Max(0, level));
+            int variant = selection.Layout;
+            MeshRenderer renderer = Model("Precast curtain-wall floor", parent, floorMeshes[variant], airborneFloor[variant]);
             renderer.transform.position = bottom;
             renderer.transform.localScale = new Vector3(size.x, height, size.y);
-            if (variant == CrewFloor)
-            {
-                Transform crew = Group(WindowCrewName, renderer.transform);
-                crew.gameObject.SetActive(false);
-                AddWindowWorker(crew, Vector3.back, Vector3.right, level * .37f);
-                AddWindowWorker(crew, Vector3.right, Vector3.forward, level * .37f + 1.23f);
-            }
+            Transform life = Group(LifeRootName, renderer.transform);
+            life.gameObject.SetActive(false);
+            for (int i = 0; i < RoomSlots[variant].Length; i++)
+                AddApartment(life, RoomSlots[variant][i], selection.Activities[i], selection.Variations[i], selection.Phases[i]);
             return renderer.gameObject;
         }
 
@@ -184,49 +197,96 @@ namespace NightShift
         {
             int variant = Array.IndexOf(floorMeshes, floor.GetComponent<MeshFilter>().sharedMesh);
             floor.GetComponent<MeshRenderer>().sharedMaterials = lit ? brightFloor[variant] : darkFloor[variant];
-            if (variant == CrewFloor)
-                floor.transform.Find(WindowCrewName).gameObject.SetActive(true);
+            floor.transform.Find(LifeRootName).gameObject.SetActive(true);
         }
 
-        private void AddWindowWorker(Transform parent, Vector3 outward, Vector3 along, float phase)
+        private void AddApartment(Transform parent, int slot, int activity, int variation, float phase)
         {
-            var window = Group("Window", parent);
-            Vector3 position = outward * 2.522f + along * CrewWindowOffset + Vector3.up * .254f;
+            bool south = slot < 6;
+            Vector3 outward = south ? Vector3.back : Vector3.right;
+            Vector3 along = south ? Vector3.right : Vector3.forward;
+            Transform window = Group("Room " + slot, parent);
+            Vector3 position = outward * 2.522f + along * ((slot % 6 - 2.5f) * WindowBayWidth) + Vector3.up * .205f;
             window.localPosition = new Vector3(position.x / FloorWidth, position.y / FloorHeight, position.z / FloorWidth);
             window.localRotation = Quaternion.LookRotation(outward);
-            // Keep the silhouette near the glazing even when seen from the side.
-            window.localScale = new Vector3(1f / FloorWidth, 1f / FloorHeight, .15f / FloorWidth);
-            MeshRenderer worker = Model("Walking worker", window, workerFrames[0], workerMaterials);
-            worker.shadowCastingMode = ShadowCastingMode.Off;
-            worker.receiveShadows = false;
-            worker.gameObject.AddComponent<NightShiftWindowWorker>().Initialize(worker, workerFrames, phase);
+            window.localScale = new Vector3(1f / FloorWidth, 1f / FloorHeight, 1f / FloorWidth);
+            roomLife.Create(window, activity, variation, phase);
         }
 
-        private static MeshBatch BuildWorkerFrame(float step, Material silhouette)
+        private FloorSelection GetFloorSelection(int level)
         {
-            var shape = new MeshBatch();
-            float stride = Mathf.Sin(step) * .081f;
-            float rise = Mathf.Abs(Mathf.Cos(step)) * .015f;
-            Vector3 hips = new Vector3(0f, .257f + rise, 0f);
-            Vector3 shoulders = new Vector3(.018f, .432f + rise, 0f);
-            shape.Beam(hips, shoulders, .092f, silhouette);
-            shape.Box(shoulders + new Vector3(.025f, .065f, 0f), new Vector3(.075f, .096f, .078f), silhouette);
-            shape.Box(shoulders + new Vector3(.028f, .101f, 0f), new Vector3(.102f, .036f, .088f), silhouette);
-            for (int side = -1; side <= 1; side += 2)
+            while (floorSelections.Count <= level)
             {
-                float swing = stride * side;
-                float depth = side * .018f;
-                Vector3 foot = new Vector3(swing + .014f, .033f + Mathf.Max(0f, Mathf.Cos(step) * side) * .033f, depth);
-                Vector3 knee = new Vector3(swing * .72f + .028f, .146f, depth);
-                Vector3 elbow = new Vector3(.009f - swing * .47f, .353f + rise, depth);
-                Vector3 hand = new Vector3(.022f - swing * .83f, .278f + rise, depth);
-                shape.Beam(hips, knee, .041f, silhouette);
-                shape.Beam(knee, foot, .037f, silhouette);
-                shape.Box(foot + Vector3.right * .014f, new Vector3(.058f, .030f, .045f), silhouette);
-                shape.Beam(shoulders, elbow, .035f, silhouette);
-                shape.Beam(elbow, hand, .027f, silhouette);
+                int layout = layoutPool.Next();
+                int roomCount = RoomSlots[layout].Length;
+                var selection = new FloorSelection(layout, roomCount);
+                for (int room = 0; room < roomCount; room++)
+                {
+                    selection.Activities[room] = activityPool.Next(
+                        room > 0 ? selection.Activities[0] : -1,
+                        room > 1 ? selection.Activities[1] : -1);
+                    selection.Variations[room] = lifeRandom.Next(8);
+                    selection.Phases[room] = (float)lifeRandom.NextDouble() * 90f;
+                }
+                floorSelections.Add(selection);
             }
-            return shape;
+            return floorSelections[level];
+        }
+
+        private sealed class FloorSelection
+        {
+            internal readonly int Layout;
+            internal readonly int[] Activities;
+            internal readonly int[] Variations;
+            internal readonly float[] Phases;
+
+            internal FloorSelection(int layout, int roomCount)
+            {
+                Layout = layout;
+                Activities = new int[roomCount];
+                Variations = new int[roomCount];
+                Phases = new float[roomCount];
+            }
+        }
+
+        private sealed class ShuffledPool
+        {
+            private readonly int[] entries;
+            private readonly System.Random random;
+            private int cursor;
+            private int previous = -1;
+
+            internal ShuffledPool(int size, System.Random random)
+            {
+                entries = new int[size];
+                for (int i = 0; i < size; i++)
+                    entries[i] = i;
+                cursor = size;
+                this.random = random;
+            }
+
+            internal int Next(int avoidFirst = -1, int avoidSecond = -1)
+            {
+                if (cursor == entries.Length)
+                {
+                    for (int i = entries.Length - 1; i > 0; i--)
+                    {
+                        int pick = random.Next(i + 1);
+                        int value = entries[i];
+                        entries[i] = entries[pick];
+                        entries[pick] = value;
+                    }
+                    cursor = 0;
+                }
+                int candidate = cursor;
+                while (entries[candidate] == previous || entries[candidate] == avoidFirst || entries[candidate] == avoidSecond)
+                    candidate++;
+                int chosen = entries[candidate];
+                entries[candidate] = entries[cursor];
+                entries[cursor++] = chosen;
+                previous = chosen;
+                return chosen;
+            }
         }
 
         internal GameObject CreateCrane(Transform parent)
@@ -253,6 +313,7 @@ namespace NightShift
             if (RenderSettings.customReflectionTexture == reflection)
                 RenderSettings.customReflectionTexture = null;
 
+            roomLife.Dispose();
             foreach (Object resource in resources)
                 Object.Destroy(resource);
         }
@@ -288,11 +349,11 @@ namespace NightShift
                     var roomUv = new Rect(mirrored ? crop + .78f : crop, .046f, mirrored ? -.78f : .78f, .90f);
                     Vector3 center = outward * 2.512f + (side % 2 == 0 ? Vector3.right : Vector3.forward) * offset;
                     Material pane = occupied ? warmGlass : glass;
-                    bool crewWindow = variant == CrewFloor && i == 2 && (side == 0 || side == 3);
-                    bool equipmentWindow = variant == EquipmentFloor && (i == 1 || i == 2 || i == 3);
-                    if (crewWindow || equipmentWindow)
+                    int roomIndex = side == 0 ? Array.IndexOf(RoomSlots[variant], i)
+                        : side == 3 ? Array.IndexOf(RoomSlots[variant], 6 + i) : -1;
+                    if (roomIndex >= 0)
                     {
-                        pane = crewWindow ? crewGlass : equipmentGlass;
+                        pane = apartmentGlass[(variant + roomIndex * 3) % apartmentGlass.Length];
                         roomUv = new Rect(0f, 0f, 1f, 1f);
                     }
                     b.Pane(center + Vector3.up * .535f, across * (bay * .5f), .335f, pane, roomUv);
@@ -312,10 +373,11 @@ namespace NightShift
                 Face(b, side, 0f, .183f, 2.54f, 5.01f, .045f, .068f, flashing);
             }
 
-            b.Box(new Vector3(-.72f + .25f * variant, 1.199f, 0f), new Vector3(.018f, .002f, 5.04f), mullion);
-            b.Box(new Vector3(0f, 1.199f, .74f - .37f * variant), new Vector3(5.04f, .002f, .015f), mullion);
+            int roofPattern = variant % 3;
+            b.Box(new Vector3(-.72f + .25f * roofPattern, 1.199f, 0f), new Vector3(.018f, .002f, 5.04f), mullion);
+            b.Box(new Vector3(0f, 1.199f, .74f - .37f * roofPattern), new Vector3(5.04f, .002f, .015f), mullion);
             for (int side = 0; side < 4; side++)
-                Face(b, side, .66f - .52f * variant, 1.199f, 2.39f, .24f, .002f, .092f, flashing);
+                Face(b, side, .66f - .52f * roofPattern, 1.199f, 2.39f, .24f, .002f, .092f, flashing);
             return b;
         }
 
@@ -554,33 +616,33 @@ namespace NightShift
             return room * (.79f + .27f * grain);
         }
 
-        private static Color PaintCrewRoom(float u, float v)
+        private static Color PaintApartmentRoom(float u, float v, int palette)
         {
-            float litWall = Mathf.Exp(-Mathf.Pow((u - .49f) * 2.4f, 2f) - Mathf.Pow((v - .61f) * 2.1f, 2f));
-            float grain = Mathf.PerlinNoise(u * 21f + 6f, v * 18f + 7f);
-            Color room = Color.Lerp(new Color(.24f, .23f, .22f), new Color(.74f, .57f, .38f), litWall);
-            if (v > .91f || v < .13f)
-                room *= .60f;
-            if (u > .17f && u < .83f && v > .86f && v < .91f)
-                room = new Color(.94f, .79f, .57f);
-            return room * (.88f + .20f * grain);
-        }
-
-        private static Color PaintEquipmentRoom(float u, float v)
-        {
-            float spill = Mathf.Exp(-Mathf.Pow((v - .77f) * 2.2f, 2f));
-            Color room = Color.Lerp(new Color(.16f, .20f, .22f), new Color(.36f, .46f, .50f), spill);
-            float cabinet = Mathf.Repeat(u * 3f, 1f);
-            if (v > .14f && v < .73f && cabinet > .08f && cabinet < .91f)
+            Color wall;
+            switch (palette)
             {
-                room *= .70f;
-                if (v > .37f && v < .61f && Mathf.Repeat(v * 35f, 1f) < .34f)
-                    room *= .73f;
-                if (v > .65f && v < .69f && cabinet > .20f && cabinet < .32f)
-                    room = new Color(.47f, .70f, .64f);
+                case 0: wall = new Color(.64f, .46f, .29f); break;
+                case 1: wall = new Color(.45f, .50f, .48f); break;
+                case 2: wall = new Color(.57f, .49f, .38f); break;
+                default: wall = new Color(.48f, .41f, .37f); break;
             }
-            if (u > .10f && u < .90f && v > .82f && v < .87f)
-                room = new Color(.67f, .79f, .84f);
+            float lampX = palette % 2 == 0 ? .27f : .73f;
+            float lamp = Mathf.Exp(-Mathf.Pow((u - lampX) * 2.4f, 2f) - Mathf.Pow((v - .76f) * 1.7f, 2f));
+            float grain = Mathf.PerlinNoise(u * 28f + palette * 7f, v * 23f + 4f);
+            Color room = wall * (.58f + .47f * lamp + .06f * grain);
+            if (v < .11f)
+                room *= .55f;
+            if (v > .12f && v < .15f)
+                room *= .69f;
+            if (u < .075f || u > .925f)
+                room *= .54f + .12f * Mathf.Sin(u * 125f);
+            if (u > .39f && u < .66f && v > .55f && v < .82f)
+            {
+                bool frame = u < .415f || u > .635f || v < .575f || v > .795f;
+                room *= frame ? .45f : .82f;
+            }
+            if (u > lampX - .1f && u < lampX + .1f && v > .87f && v < .90f)
+                room = Color.Lerp(wall, new Color(.94f, .82f, .63f), .75f);
             return room;
         }
 

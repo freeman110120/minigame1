@@ -195,11 +195,13 @@ namespace NightShift
                 Destroy(runRoot.gameObject);
             }
             runRoot = NewChild("Current tower", transform);
+            art.BeginRun(Random.Range(0, int.MaxValue));
             settled.Clear();
             settledVisuals.Clear();
             var baseFloor = new FloorFootprint(Vector2.zero, FloorSize);
             settled.Add(baseFloor);
             settledVisuals.Add(art.CreateFloor(Vector3.zero, FloorSize, FloorHeight, runRoot, 0));
+            art.SetFloorLit(settledVisuals[0], false);
 
             craneAnchor = NewChild("Crane lift rig", runRoot);
             crane = art.CreateCrane(craneAnchor);
